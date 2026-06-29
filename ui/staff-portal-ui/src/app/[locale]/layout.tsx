@@ -3,15 +3,12 @@ import "@/commons/globals.css";
 import 'react-toastify/dist/ReactToastify.css';
 import { GlobalContextProvider } from "@/context/GlobalContext";
 import { NextIntlClientProvider } from 'next-intl';
-import { getMessages, getTranslations } from 'next-intl/server';
-import { Header } from "@/components/layout";
+import { Header, DocumentHeadUpdater } from "@/components/layout";
 import { RuntimeConfigProvider } from "@/context/RuntimeConfigContext";
 import { RegisterProvider } from "@/context/RegisterContext";
 import { ToastContainer } from "react-toastify";
 import { Roboto } from 'next/font/google'
-import { clientSafeConfig } from '@/app/api/_lib/client-safe-config';
-import { getOrigin } from "@/app/api/_lib/get-origin";
-
+import { getServerLayoutData } from '@/app/api/_lib/server-layout-data';
 
 const roboto = Roboto({
     weight: ['300', '400', '500', '700'],
@@ -20,27 +17,14 @@ const roboto = Roboto({
     display: 'swap',
 })
 
-export async function generateMetadata({
-    params
-}: {
-    params: Promise<{ locale: string }>;
-}): Promise<Metadata> {
-
-    const origin = await getOrigin();
-
-    const { locale } = await params;
-    const t = await getTranslations({ locale });
-    await clientSafeConfig.fetchRegistryConfig(origin);
-    const config = clientSafeConfig.getAll();
-
-    return {
-        title: config.registryName || t('registry'),
-        description: "",
-        icons: {
-            icon: config.registryLogo || "/images/common/openg2p_logo.png",
-        },
-    };
-}
+// Static metadata avoids backend calls during Link prefetch (generateMetadata runs per prefetch).
+export const metadata: Metadata = {
+    title: "Registry",
+    description: "",
+    icons: {
+        icon: "/images/common/openg2p_logo.png",
+    },
+};
 
 export default async function RootLayout({
     children,
@@ -49,14 +33,14 @@ export default async function RootLayout({
     children: React.ReactNode;
     params: Promise<{ locale: string }>;
 }) {
-
-    const origin = await getOrigin();
-
     const { locale } = await params;
-    const messages = await getMessages();
-
-    await clientSafeConfig.fetchRegistryConfig(origin);
-    const config = clientSafeConfig.getAll();
+    console.log("[server-config] RootLayout: getServerLayoutData", { locale });
+    const { config, messages } = await getServerLayoutData(locale);
+    console.log("[server-config] RootLayout: done", {
+        locale,
+        registryName: config.registryName,
+        messageKeys: Object.keys(messages).length,
+    });
 
     const cssVariables = `
         :root {
@@ -87,6 +71,7 @@ export default async function RootLayout({
                 <NextIntlClientProvider messages={messages}>
                     <GlobalContextProvider>
                         <RuntimeConfigProvider initialConfig={config}>
+                            <DocumentHeadUpdater />
                             <Header />
                             <div className="pt-17.5">
                                 <RegisterProvider>
