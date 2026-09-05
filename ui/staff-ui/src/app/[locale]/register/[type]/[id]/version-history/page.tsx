@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import {
     createWidgetStore,
     SectionRenderer,
@@ -104,6 +104,8 @@ export default function VersionHistoryPage() {
 
     const { type: registerType, id: routeRecordId } =
         useParams<{ type: string; id: string }>();
+    const searchParams = useSearchParams();
+    const recordName = searchParams.get('recordName') ? decodeURIComponent(searchParams.get('recordName') || '') : null;
 
     const { currentRegister } = useRegister();
     const internalRecordId = routeRecordId ? decodeURIComponent(routeRecordId) : '';
@@ -317,6 +319,7 @@ export default function VersionHistoryPage() {
     const breadcrumb = useBreadcrumb({
         registerType,
         internalRecordId,
+        recordName,
         includeActiveTab: true,
         includeChangeRequest: false,
         customItems: [

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useBreadcrumb } from "@/shared/hooks";
 import { useRegister } from "@/context/RegisterContext";
@@ -11,6 +11,8 @@ export const useRegisterDetail = (onChangeRequestCreated: () => void) => {
     const t = useTranslations();
     const { type: registerType, id } = useParams<{ type: string; id: string }>();
     const internalRecordId = id ? decodeURIComponent(id) : undefined;
+    const searchParams = useSearchParams();
+    const recordName = searchParams.get('recordName') ? decodeURIComponent(searchParams.get('recordName') || '') : null;
 
     const widgetStore = useMemo(() => createWidgetStore(), []);
 
@@ -21,6 +23,7 @@ export const useRegisterDetail = (onChangeRequestCreated: () => void) => {
     const breadcrumb = useBreadcrumb({
         registerType,
         internalRecordId,
+        recordName,
         includeActiveTab: false,
     });
 

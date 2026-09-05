@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { PaginationBar, TabsLayout } from '@/components/shared';
 import { ChangeRequestList, ChangeRequestSkeleton } from '@/features/change-request/components';
 import { useChangeRequestList } from '@/features/change-request/hooks/useChangeRequestList';
@@ -15,6 +15,8 @@ export default function ChangeRequestPage() {
     const locale = useLocale();
     const { type: registerType, id } = useParams<{ type: string; id: string }>();
     const internalRecordId = id ? decodeURIComponent(id) : undefined;
+    const searchParams = useSearchParams();
+    const recordName = searchParams.get('recordName') ? decodeURIComponent(searchParams.get('recordName') || '') : null;
     const { currentRegister } = useRegister();
 
     const {
@@ -65,6 +67,7 @@ export default function ChangeRequestPage() {
     const breadcrumb = useBreadcrumb({
         registerType,
         internalRecordId,
+        recordName,
         includeActiveTab: true,
         includeChangeRequest: true,
     });
@@ -130,7 +133,7 @@ export default function ChangeRequestPage() {
                     <ChangeRequestList
                         changeRequests={changeRequests}
                         getDetailsUrl={changeRequest =>
-                            `/${locale}/register/${registerType}/${internalRecordId}/change-request/${changeRequest.change_request_id}?tab=${activeTabId}`
+                            `/${locale}/register/${registerType}/${internalRecordId}/change-request/${changeRequest.change_request_id}?tab=${activeTabId}${recordName ? `&recordName=${encodeURIComponent(recordName)}` : ''}`
                         }
                     />
                 </>

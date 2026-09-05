@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { useSearchParams } from 'next/navigation';
 import {
     TabsLayout,
 } from '@/components/shared';
@@ -18,6 +19,7 @@ import { VersionHistoryCard } from '@/features/register/components';
 
 export default function RegisterDetailPage() {
     const t = useTranslations();
+    const searchParams = useSearchParams();
 
     // state to update the count of pending change requests 
     const [changeRequestCount, setChangeRequestCount] = useState<number | undefined>(undefined);
@@ -105,12 +107,14 @@ export default function RegisterDetailPage() {
                                     activeTabId={activeTabId}
                                     count={changeRequestCount}
                                     onCountLoaded={setChangeRequestCount}
+                                    recordName={searchParams.get('recordName') ? decodeURIComponent(searchParams.get('recordName') || '') : null}
                                 />
                                 <VersionHistoryCard
                                     type={registerType}
                                     registerId={currentRegister.register_id}
                                     internalRecordId={internalRecordId}
                                     activeTabId={activeTabId}
+                                    recordName={searchParams.get('recordName') ? decodeURIComponent(searchParams.get('recordName') || '') : null}
                                 />
                             </>
                         )}

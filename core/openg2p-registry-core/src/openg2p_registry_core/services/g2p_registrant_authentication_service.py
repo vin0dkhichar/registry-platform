@@ -6,12 +6,6 @@ from typing import Any
 from cryptography.fernet import Fernet
 
 from sqlalchemy import desc, select
-<<<<<<< HEAD
-from sqlalchemy.ext.asyncio import async_sessionmaker
-
-from openg2p_fastapi_common.models import BaseORMModel
-=======
->>>>>>> 1.2
 from openg2p_fastapi_common.service import BaseService
 from openg2p_fastapi_common.context import dbengine
 from openg2p_fastapi_common.crypto import CryptoFactory

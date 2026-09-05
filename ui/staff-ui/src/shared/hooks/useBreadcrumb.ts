@@ -54,24 +54,32 @@ export function useBreadcrumb(options: BreadcrumbOptions) {
                 href: `/register/${registerType}${search ? `?${search}` : ''}`,
             });
 
-            if (internalRecordId && activeTab && recordName?.trim()) {
+            if (internalRecordId && recordName?.trim()) {
+                const params = new URLSearchParams(search);
+                params.set('recordName', recordName);
                 items.push({
                     label: recordName,
-                    href: `/register/${registerType}/${internalRecordId}${search ? `?${search}` : ''}`,
+                    href: `/register/${registerType}/${internalRecordId}${params.toString() ? `?${params.toString()}` : ''}`,
                 });
             }
 
             if (includeChangeRequest && internalRecordId) {
+                const params = new URLSearchParams();
+                if (activeTabId) params.set('tab', activeTabId);
+                if (recordName) params.set('recordName', recordName);
                 items.push({
                     label: t('change_request') ?? 'Change Request',
-                    href: `/register/${registerType}/${internalRecordId}/change-request${activeTabId ? `?tab=${activeTabId}` : ''}`,
+                    href: `/register/${registerType}/${internalRecordId}/change-request${params.toString() ? `?${params.toString()}` : ''}`,
                 });
             }
 
             if (changeId && internalRecordId) {
+                const params = new URLSearchParams();
+                if (activeTabId) params.set('tab', activeTabId);
+                if (recordName) params.set('recordName', recordName);
                 items.push({
                     label: recordName?.trim() || "",
-                    href: `/register/${registerType}/${internalRecordId}/change-request/${changeId}${activeTabId ? `?tab=${activeTabId}` : ''}`,
+                    href: `/register/${registerType}/${internalRecordId}/change-request/${changeId}${params.toString() ? `?${params.toString()}` : ''}`,
                 });
             }
         }
