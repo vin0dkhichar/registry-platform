@@ -4,13 +4,13 @@ import uuid
 from datetime import datetime
 
 from fastapi_cache.decorator import cache
-from openg2p_fastapi_common.context import dbengine
+from openg2p_fastapi_common.context import get_async_session_maker
 from openg2p_fastapi_common.service import BaseService
 from openg2p_registry_core.services.g2p_completion_score_service import G2PCompletionScoreService
 from openg2p_registry_core.services.g2p_score_compute_service import G2PScoreComputeService
 from sqlalchemy import Date as SQLDate, and_, exists, func, inspect, or_, select
 from sqlalchemy.orm.attributes import flag_modified
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..cache import metadata_key_builder
 from ..config import Settings
@@ -55,14 +55,16 @@ from .g2p_attribute_value_validator import G2PAttributeValueValidator
 from .g2p_register_domain_service import G2PRegisterDomainService
 from .g2p_register_history_service import G2PRegisterHistoryService
 from .g2p_register_service import G2PRegisterService
+from .g2p_change_request_section_payload_service import (
+    G2PChangeRequestSectionPayloadService,
+)
+from ..interfaces import G2PRegisterDomainFactory
 
 _logger = logging.getLogger("g2p-register-change-request-service")
 _config = Settings.get_config(strict=False)
 
-_DOMAIN_FACTORY_MODULE = "openg2p_registry_extensions.register_domain.factory"
 _DOMAIN_MODELS_MODULE = "openg2p_registry_extensions.register_domain.models"
 _DOMAIN_SCHEMAS_MODULE = "openg2p_registry_extensions.register_domain.schemas"
-_DOMAIN_FACTORY_CLASS = "G2PRegisterDomainFactory"
 _REGISTER_CLASS_PREFIX = "G2PRegister"
 _REGISTER_SCHEMA_CLASS_PREFIX = "G2PRegisterSchema"
 _REGISTER_HISTORY_CLASS_PREFIX = "G2PRegisterHistory"
@@ -81,6 +83,25 @@ class G2PRegisterChangeRequestService(BaseService):
     async def _get_tab(self, tab_id: str, session):
         return await session.get(G2PRegisterUITab, tab_id)
 
+    @staticmethod
+    def _metadata_field(metadata, field_name: str):
+        """Read a field from cached metadata that may be an ORM object or a dict."""
+        if metadata is None:
+            return None
+        if isinstance(metadata, dict):
+            return metadata.get(field_name)
+        return getattr(metadata, field_name, None)
+
+    async def _resolve_register_mnemonic_and_tab_label(
+        self, register_id: str, tab_id: str, session
+    ) -> tuple[str | None, str | None]:
+        register_metadata = await self._get_register_definition(register_id, session)
+        tab_metadata = await self._get_tab(tab_id, session)
+        return (
+            self._metadata_field(register_metadata, "register_mnemonic"),
+            self._metadata_field(tab_metadata, "tab_label"),
+        )
+
     async def create_change_request(
         self,
         change_request_request_payload: ChangeRequestRequestPayload,
@@ -90,7 +111,7 @@ class G2PRegisterChangeRequestService(BaseService):
         bearer_token: str | None = None,
         requester_sub: str | None = None,
     ):
-        session_maker = async_sessionmaker(dbengine.get(), expire_on_commit=False)
+        session_maker = get_async_session_maker()
         async with session_maker() as session:
 
             register_definition: G2PRegisterDefinition = await self.validate_register_definition(change_request_request_payload.register_id, session)
@@ -105,10 +126,12 @@ class G2PRegisterChangeRequestService(BaseService):
                 register_definition,
                 register_section,
                 section_register_definition,
+                session,
             )
             await self._validate_domain_attributes(
                 self._records_from_change_request_payload(change_request_request_payload),
                 section_register_definition.register_mnemonic,
+                register_section.section_ui_schema,
             )
 
             # Extract internal_record_id from change_payload if present
@@ -169,7 +192,7 @@ class G2PRegisterChangeRequestService(BaseService):
         self,
         data_policies: list[dict] | None = None,
     ) -> ChangeRequestSummaryData:
-        session_maker = async_sessionmaker(dbengine.get(), expire_on_commit=False)
+        session_maker = get_async_session_maker()
         async with session_maker() as session:
             change_request_summary_data: ChangeRequestSummaryData = await self._fetch_change_request_summary_data(
                 session, data_policies
@@ -188,7 +211,7 @@ class G2PRegisterChangeRequestService(BaseService):
         data_policies: list[dict] | None = None,
     ) -> tuple[list[ChangeRequestData], int]:
         """Get all change requests for a specific internal record and tab with pagination"""
-        session_maker = async_sessionmaker(dbengine.get(), expire_on_commit=False)
+        session_maker = get_async_session_maker()
         async with session_maker() as session:
             await self._ensure_subject_record_readable(
                 subject_register_id, subject_record_id, data_policies, session
@@ -202,7 +225,7 @@ class G2PRegisterChangeRequestService(BaseService):
         data_policies: list[dict] | None = None,
     ) -> ChangeRequestData:
         """Get a single change request by ID"""
-        session_maker = async_sessionmaker(dbengine.get(), expire_on_commit=False)
+        session_maker = get_async_session_maker()
         async with session_maker() as session:
             await self._ensure_change_request_readable(change_request_id, data_policies, session)
             change_request_data: ChangeRequestData = await self._fetch_change_request(change_request_id, session)
@@ -213,7 +236,7 @@ class G2PRegisterChangeRequestService(BaseService):
         self, change_request_id: str
     ) -> ChangeRequestSequenceCheckData:
         """Return whether earlier pending CRs block approval for this change request."""
-        session_maker = async_sessionmaker(dbengine.get(), expire_on_commit=False)
+        session_maker = get_async_session_maker()
         async with session_maker() as session:
             change_request = (
                 await session.execute(
@@ -257,7 +280,7 @@ class G2PRegisterChangeRequestService(BaseService):
         data_policies: list[dict] | None = None,
     ) -> tuple[list[ChangeRequestFlattenedData], int]:
         """Get all change requests for a specific internal record and tab with flattened change_payload fields"""
-        session_maker = async_sessionmaker(dbengine.get(), expire_on_commit=False)
+        session_maker = get_async_session_maker()
         async with session_maker() as session:
             await self._ensure_subject_record_readable(
                 subject_register_id, subject_record_id, data_policies, session
@@ -266,7 +289,7 @@ class G2PRegisterChangeRequestService(BaseService):
             return change_requests_list, total_items
 
     async def approve_change_request(self, change_request_id: str, approved_by: str | None = None):
-        session_maker = async_sessionmaker(dbengine.get(), expire_on_commit=False)
+        session_maker = get_async_session_maker()
         async with session_maker() as session:
             change_request = await self._approve_change_request_core(
                 change_request_id=change_request_id,
@@ -709,7 +732,7 @@ class G2PRegisterChangeRequestService(BaseService):
         reason: str,
         rejected_by: str | None = None,
     ):
-        session_maker = async_sessionmaker(dbengine.get(), expire_on_commit=False)
+        session_maker = get_async_session_maker()
         async with session_maker() as session:
             change_request = await self.validate_change_request_exists(change_request_id, session)
             _logger.info("Validated change request for rejection: %s", change_request)
@@ -1036,6 +1059,7 @@ class G2PRegisterChangeRequestService(BaseService):
         register_definition: G2PRegisterDefinition,
         section: G2PRegisterSection,
         section_register_definition: G2PRegisterDefinition,
+        session: AsyncSession,
     ) -> None:
         if register_definition.register_purpose != RegisterPurposeEnum.REGISTER.value:
             raise self._invalid_request("Change request must belong to a register")
@@ -1074,6 +1098,28 @@ class G2PRegisterChangeRequestService(BaseService):
                     raise self._invalid_request(f"internal_record_id is required for table {action} payloads.")
                 if action == ChangeActionEnum.ADD.value and not getattr(change_payload, "link_internal_record_id", None):
                     raise self._invalid_request(f"link_internal_record_id is required for table {action} payloads.")
+
+        await G2PChangeRequestSectionPayloadService.get_component().validate(
+            change_payloads,
+            section,
+            section_register_definition,
+            session,
+            has_documents=bool(payload.documents),
+        )
+
+        pending_count = (
+            await session.execute(
+                select(func.count()).select_from(G2PRegisterChangeRequest).where(
+                    G2PRegisterChangeRequest.internal_record_id == payload.internal_record_id,
+                    G2PRegisterChangeRequest.section_id == payload.section_id,
+                    G2PRegisterChangeRequest.approval_status == ApprovalStatusEnum.PENDING.value,
+                )
+            )
+        ).scalar_one()
+        if pending_count > 0:
+            raise self._invalid_request(
+                "A pending change request already exists for this record and section"
+            )
 
     async def _get_change_request_payload(self, change_request_id: str, session) -> G2PRegisterChangeRequestPayload:
         payload = (
@@ -1266,6 +1312,9 @@ class G2PRegisterChangeRequestService(BaseService):
         mapper = inspect(model_class)
         for key, value in schema_data.items():
             if key not in change_payload or key in {"internal_record_id", "edit_action"} or key not in mapper.columns:
+                continue
+            # Empty/null parent link means omit, not clear the existing parent.
+            if key == "link_internal_record_id" and not value:
                 continue
             value = self._normalize_model_value(value, key, mapper)
             setattr(existing, key, value)
@@ -1483,12 +1532,46 @@ class G2PRegisterChangeRequestService(BaseService):
         data_policies: list[dict] | None = None,
     ) -> tuple[list[ChangeRequestSearchResultData], int]:
         """Search in change requests using search_text field with pagination"""
-        session_maker = async_sessionmaker(dbengine.get(), expire_on_commit=False)
+        session_maker = get_async_session_maker()
         async with session_maker() as session:
             search_results, total_items = await self._search_in_change_request(
                 search_text, current_page, page_size, filter_by, session, sort_by, data_policies
             )
             return search_results, total_items
+
+    @staticmethod
+    def _parse_change_request_search_sort(sort_by: str | None) -> tuple[str | None, bool]:
+        """Parse search sort_by into (column, descending).
+
+        Dash-prefix is the platform convention: "created_at" is asc, "-created_at" is desc.
+        "field:dir" is still accepted for older callers. Empty sort_by is (None, True)
+        so the caller can default to created_at desc.
+        """
+        if not sort_by or not str(sort_by).strip():
+            return None, True
+
+        raw = str(sort_by).strip()
+        if ":" in raw:
+            field, direction = raw.split(":", 1)
+            field = field.strip().lstrip("-")
+            descending = direction.strip().lower() == "desc"
+        else:
+            descending = raw.startswith("-")
+            field = raw.lstrip("-").strip()
+
+        return field or None, descending
+
+    def _apply_change_request_search_sort(self, query, sort_by: str | None):
+        field, descending = self._parse_change_request_search_sort(sort_by)
+        if field and hasattr(G2PRegisterChangeRequest, field):
+            sort_column = getattr(G2PRegisterChangeRequest, field)
+        elif field and hasattr(G2PRegisterChangeRequestPayload, field):
+            sort_column = getattr(G2PRegisterChangeRequestPayload, field)
+        else:
+            sort_column = G2PRegisterChangeRequest.created_at
+            if field is None:
+                descending = True
+        return query.order_by(sort_column.desc() if descending else sort_column.asc())
 
     async def _search_in_change_request(
         self,
@@ -1516,26 +1599,7 @@ class G2PRegisterChangeRequestService(BaseService):
             G2PRegisterChangeRequest.change_request_id == G2PRegisterChangeRequestPayload.change_request_id
         ).where(*search_conditions)
 
-        # Apply sorting
-        if sort_by:
-            if ":" in sort_by:
-                sort_field, sort_dir = sort_by.split(":")
-            else:
-                sort_field, sort_dir = sort_by, "desc"
-
-            if hasattr(G2PRegisterChangeRequest, sort_field):
-                sort_column = getattr(G2PRegisterChangeRequest, sort_field)
-            elif hasattr(G2PRegisterChangeRequestPayload, sort_field):
-                sort_column = getattr(G2PRegisterChangeRequestPayload, sort_field)
-            else:
-                sort_column = G2PRegisterChangeRequest.created_at
-
-            if sort_dir.lower() == "desc":
-                base_query = base_query.order_by(sort_column.desc())
-            else:
-                base_query = base_query.order_by(sort_column.asc())
-        else:
-            base_query = base_query.order_by(G2PRegisterChangeRequest.created_at.desc())
+        base_query = self._apply_change_request_search_sort(base_query, sort_by)
 
         # Get total count
         count_result = await session.execute(select(func.count()).select_from(G2PRegisterChangeRequest).join(
@@ -1601,7 +1665,7 @@ class G2PRegisterChangeRequestService(BaseService):
 
     async def get_number_of_pending_change_requests(self, subject_register_id: str, subject_record_id: str, tab_id: str) -> NumberOfPendingChangeRequestsData:
         """Get the number of pending change requests for a given register, internal_record_id and tab_id"""
-        session_maker = async_sessionmaker(dbengine.get(), expire_on_commit=False)
+        session_maker = get_async_session_maker()
         async with session_maker() as session:
             await self.validate_register_definition(subject_register_id, session)
 
@@ -1625,7 +1689,7 @@ class G2PRegisterChangeRequestService(BaseService):
 
     async def get_number_of_cross_register_changes(self, subject_register_id: str, subject_record_id: str) -> NumberOfCrossRegisterChangesData:
         """Get the number of cross-register pending change requests by searching subject_record_id in search_text of G2PRegisterChangeRequestPayload"""
-        session_maker = async_sessionmaker(dbengine.get(), expire_on_commit=False)
+        session_maker = get_async_session_maker()
         async with session_maker() as session:
             await self.validate_register_definition(subject_register_id, session)
 
@@ -1650,7 +1714,7 @@ class G2PRegisterChangeRequestService(BaseService):
 
     async def get_cross_register_changes(self, subject_register_id: str, subject_record_id: str) -> list[CrossRegisterChangeRequestData]:
         """Get the list of cross-register pending change requests by searching subject_record_id in search_text of G2PRegisterChangeRequestPayload"""
-        session_maker = async_sessionmaker(dbengine.get(), expire_on_commit=False)
+        session_maker = get_async_session_maker()
         async with session_maker() as session:
             await self.validate_register_definition(subject_register_id, session)
 
@@ -1739,6 +1803,9 @@ class G2PRegisterChangeRequestService(BaseService):
             session,
             [change_request.change_request_id for change_request, _ in change_requests],
         )
+        register_mnemonic, tab_label = await self._resolve_register_mnemonic_and_tab_label(
+            subject_register_id, tab_id, session
+        )
 
         # Convert ORM objects to ChangeRequestData while still in session context
         for change_request, payload in change_requests:
@@ -1755,7 +1822,9 @@ class G2PRegisterChangeRequestService(BaseService):
                 change_request_id=change_request.change_request_id,
                 record_name=change_request.record_name,
                 register_id=change_request.register_id,
+                register_mnemonic=register_mnemonic,
                 tab_id=change_request.tab_id,
+                tab_label=tab_label,
                 internal_record_id=change_request.internal_record_id,
                 section_id=change_request.section_id,
                 section_mnemonic=change_request.section_mnemonic,
@@ -1931,6 +2000,10 @@ class G2PRegisterChangeRequestService(BaseService):
             )
         ).scalar()
 
+        register_mnemonic, tab_label = await self._resolve_register_mnemonic_and_tab_label(
+            change_request.register_id, change_request.tab_id, session
+        )
+
         from .g2p_document_service import G2PDocumentService
 
         document_service = G2PDocumentService.get_component()
@@ -1949,7 +2022,9 @@ class G2PRegisterChangeRequestService(BaseService):
             change_request_id=change_request.change_request_id,
             record_name=change_request.record_name,
             register_id=change_request.register_id,
+            register_mnemonic=register_mnemonic,
             tab_id=change_request.tab_id,
+            tab_label=tab_label,
             internal_record_id=change_request.internal_record_id,
             section_id=change_request.section_id,
             section_mnemonic=register_section.section_mnemonic,
@@ -2004,6 +2079,9 @@ class G2PRegisterChangeRequestService(BaseService):
         change_requests = result.all()
 
         change_requests_list: list[ChangeRequestFlattenedData] = []
+        register_mnemonic, tab_label = await self._resolve_register_mnemonic_and_tab_label(
+            subject_register_id, tab_id, session
+        )
 
         # Convert ORM objects to ChangeRequestFlattenedData with flattened fields
         for change_request, payload in change_requests:
@@ -2048,6 +2126,10 @@ class G2PRegisterChangeRequestService(BaseService):
                 for key, value in change_payload.items():
                     if key != "internal_record_id":
                         change_request_data_dict[key] = value
+
+            # Set after flatten so payload keys cannot overwrite lookup values
+            change_request_data_dict["register_mnemonic"] = register_mnemonic
+            change_request_data_dict["tab_label"] = tab_label
 
             # Create ChangeRequestFlattenedData object with flattened fields
             change_request_data: ChangeRequestFlattenedData = ChangeRequestFlattenedData(**change_request_data_dict)
@@ -2181,16 +2263,22 @@ class G2PRegisterChangeRequestService(BaseService):
         self,
         records: list[dict],
         section_register_mnemonic: str,
+        section_ui_schema: dict | None,
     ) -> None:
         # Coded values first, and for every register — the check is the same one
         # whatever the domain, and hooking it here means an extension inherits it
         # without implementing anything. No-op unless
         # registry_core_validate_attribute_values is on.
-        await G2PAttributeValueValidator.get_component().validate_records(records)
+        records_for_validation = G2PAttributeValueValidator.records_for_validation(records)
+        field_map = G2PAttributeValueValidator.field_map_from_ui_schema(section_ui_schema)
+        await G2PAttributeValueValidator.get_component().validate_records(
+            records_for_validation,
+            field_map=field_map,
+        )
 
         domain_service = self._get_domain_service_by_register_mnemonic(section_register_mnemonic)
         if domain_service:
-            await domain_service.validate_domain_attributes(records)
+            await domain_service.validate_domain_attributes(records_for_validation)
 
     def _get_required_domain_service(self, register_mnemonic: str) -> G2PRegisterDomainService:
         domain_service = self._get_domain_service_by_register_mnemonic(register_mnemonic)
@@ -2201,12 +2289,8 @@ class G2PRegisterChangeRequestService(BaseService):
     def _get_domain_service_by_register_mnemonic(self, register_mnemonic: str) -> G2PRegisterDomainService | None:
         """Resolve the domain service for a given register mnemonic via the domain factory."""
         try:
-            module = importlib.import_module(_DOMAIN_FACTORY_MODULE)
-            domain_factory_class = getattr(module, _DOMAIN_FACTORY_CLASS)
-            g2p_registry_domain_factory = domain_factory_class.get_component()
-            if not g2p_registry_domain_factory:
-                g2p_registry_domain_factory = domain_factory_class()
-            return g2p_registry_domain_factory.get_domain_service(register_mnemonic)
+            domain_factory = G2PRegisterDomainFactory.get_component() or G2PRegisterDomainFactory()
+            return domain_factory.get_domain_service(register_mnemonic)
         except Exception as error:
             _logger.warning(
                 f"Unable to resolve domain service for register mnemonic '{register_mnemonic}': {error}"

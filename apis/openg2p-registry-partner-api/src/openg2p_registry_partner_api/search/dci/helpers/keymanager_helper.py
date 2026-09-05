@@ -1,7 +1,11 @@
 from typing import Dict, Any
 from openg2p_fastapi_common.service import BaseService
 from openg2p_registry_core.errors import G2PRegistryException, G2PRegistryErrorCodes
+<<<<<<< HEAD
 from openg2p_fastapi_common.utils.crypto import build_crypto_helper
+=======
+from openg2p_fastapi_common.crypto import CryptoFactory, CryptoHelper
+>>>>>>> 1.2
 
 from ....config import Settings
 from ..schemas import (
@@ -16,7 +20,11 @@ def partner_reference_id(sender_id: str) -> str:
     """Map a DCI ``header.sender_id`` to the partner reference used to look up
     keys — ``PARTNER_<SENDER_ID>`` (upper-cased, ``-`` -> ``_``).
 
+<<<<<<< HEAD
     This is the SAME convention as openg2p-fastapi-partner-auth's
+=======
+    This is the SAME convention as IAM ``JWTValidationHelper.get_partner_id_from_payload``
+>>>>>>> 1.2
     ``JWTValidationHelper.get_partner_id_from_payload`` and g2p-bridge, so a
     partner's key is looked up identically across the platform (Partner
     Management, Consent Manager, Registry).
@@ -36,7 +44,11 @@ class DciKeymanagerHelper(BaseService):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+<<<<<<< HEAD
         self.crypto_helper = build_crypto_helper(backend=_config.crypto_backend)
+=======
+        self.crypto_helper: CryptoHelper = CryptoFactory.get()
+>>>>>>> 1.2
 
     async def generate_signature(
         self,

@@ -541,8 +541,13 @@ class VersionDatesData(BaseModel):
 
 
 class VersionForDateData(BaseModel):
-    """Individual change record for a specific date"""
-    change_request_id: str
+    """Individual change record for a specific date.
+
+    Staff edits expose ``change_request_id``. Intake ingest exposes
+    ``submission_id``. Version history loads the snapshot from whichever is set.
+    """
+    change_request_id: Optional[str] = None
+    submission_id: Optional[str] = None
     created_at: str
     request_id: Optional[str] = None
 
@@ -555,6 +560,7 @@ class VersionsForDateData(BaseModel):
     truncated_created_date: str
     section_id: str
     section_mnemonic: str
+    section_register_id: Optional[str] = None
     changes: List[VersionForDateData] = []
 
 
@@ -605,7 +611,9 @@ class ChangeRequestData(BaseModel):
     change_request_id: str
     record_name: Optional[str] = None
     register_id: str
+    register_mnemonic: Optional[str] = None
     tab_id: str
+    tab_label: Optional[str] = None
     internal_record_id: str
     section_id: str
     section_mnemonic: str
@@ -633,7 +641,9 @@ class ChangeRequestFlattenedData(BaseModel):
     change_request_id: str
     record_name: Optional[str] = None
     register_id: str
+    register_mnemonic: Optional[str] = None
     tab_id: str
+    tab_label: Optional[str] = None
     internal_record_id: str
     section_id: str
     section_mnemonic: str
@@ -1289,106 +1299,12 @@ class LanguageOperationData(BaseModel):
     success: bool = True
 
 
-# =============================================================================
-# Attribute Schemas
-# =============================================================================
-
-class AttributeData(BaseModel):
-    attribute_id: str
-    attribute_code: str
-    attribute_display: str
-    is_hierarchical: bool
-
-
-class AttributeValueData(BaseModel):
-    value_id: str
-    attribute_id: str
-    value_code: str
-    value_display: str
-    parent_value_id: Optional[str] = None
-    sort_order: int
-
-
-class GetAttributesRequestPayload(BaseModel):
-    pass
-
-
-class GetAttributeRequestPayload(BaseModel):
-    attribute_id: str
-
-
-class CreateAttributeRequestPayload(BaseModel):
-    attribute_code: str
-    attribute_display: str
-    is_hierarchical: bool = False
-
-
-class UpdateAttributeRequestPayload(BaseModel):
-    attribute_id: str
-    attribute_code: Optional[str] = None
-    attribute_display: Optional[str] = None
-    is_hierarchical: Optional[bool] = None
-
-
-class DeleteAttributeRequestPayload(BaseModel):
-    attribute_id: str
-
-
-class GetAttributeValuesRequestPayload(BaseModel):
-    attribute_id: Optional[str] = None
-    parent_value_id: Optional[str] = None
-
-
 class GeoLevelValueData(BaseModel):
     level_value_id: str
     level_value_mnemonic: str
     level_value_display: Optional[str] = None
     parent_level_value_id: Optional[str] = None
     level_mnemonic: Optional[str] = None
-
-
-class CreateAttributeValueRequestPayload(BaseModel):
-    attribute_id: str
-    value_code: str
-    value_display: str
-    parent_value_id: Optional[str] = None
-    sort_order: int = 0
-
-
-class UpdateAttributeValueRequestPayload(BaseModel):
-    value_id: str
-    value_code: Optional[str] = None
-    value_display: Optional[str] = None
-    parent_value_id: Optional[str] = None
-    sort_order: Optional[int] = None
-
-
-class DeleteAttributeValueRequestPayload(BaseModel):
-    value_id: str
-
-
-class CreateAttributeResponsePayload(BaseModel):
-    attribute: AttributeData
-
-
-class UpdateAttributeResponsePayload(BaseModel):
-    attribute: AttributeData
-
-
-class DeleteAttributeResponsePayload(BaseModel):
-    attribute_id: str
-
-
-class CreateAttributeValueResponsePayload(BaseModel):
-    attribute_value: AttributeValueData
-
-
-class UpdateAttributeValueResponsePayload(BaseModel):
-    attribute_value: AttributeValueData
-
-
-class DeleteAttributeValueResponsePayload(BaseModel):
-    value_id: str
 
 
 # =============================================================================

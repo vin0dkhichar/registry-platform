@@ -12,7 +12,6 @@ import {
   buildEditableSection,
 } from './utils';
 import {
-  useCrViewData,
   useIntakeFormAccordion,
   useSectionEditPortal,
   useSectionDirty,
@@ -59,7 +58,6 @@ export const SectionRenderer = ({
 
   const dataSourceRequestHandler =
     propDataSourceRequestHandler || contextDataSourceRequestHandler;
-  const currentSchemaData = schemaData || contextSchemaData || {};
   const storeValues = useSelector(
     (state: WidgetRootState) => state.widget?.values || {},
   );
@@ -68,8 +66,6 @@ export const SectionRenderer = ({
   const sectionId = section['section-id'];
   const gridId = `section-panels-${sectionId}`;
   const sectionClassId = `section-${sectionId}`;
-
-  const crViewData = useCrViewData(mode, currentSchemaData, storeValues);
 
   const { columnSpan, hasTable: hasTableWidget, hasExplicitTableSpan } = useMemo(
     () => resolveSectionColumnSpan(section.panels, gridColumnSpan),
@@ -205,19 +201,15 @@ export const SectionRenderer = ({
         style={{
           gridColumn: `span ${columnSpan}`,
           width: '100%',
-          borderRadius: 'var(--owt-section-border-radius, 10px)',
-          borderColor: 'var(--owt-color-bg, #FFFFFF)',
+          borderRadius: 'var(--owt-section-border-radius)',
+          borderColor: 'var(--owt-color-bg)',
           ...(mode === 'IntakeForm' && isExpanded
             ? {
-                backgroundColor: 'var(--owt-color-primary-light, #FBE6AA)',
-                border: '1px dashed var(--owt-color-primary-dark, #F07B1A)',
+                backgroundColor: 'var(--owt-color-primary-light)',
+                border: '1px dashed var(--owt-color-primary-dark)',
               }
             : {
-                backgroundColor:
-                  changeRequestType === 'old'
-                    ? 'var(--owt-color-bg-alt, #F6F6F6)'
-                    : 'var(--owt-section-bg, #FFFFFF)',
-                opacity: changeRequestType === 'old' ? 0.95 : 1,
+                backgroundColor: 'var(--owt-section-bg)',
               }),
           ...(isEditMode && sectionHeight
             ? { height: `${sectionHeight}px`, minHeight: `${sectionHeight}px` }
@@ -255,7 +247,6 @@ export const SectionRenderer = ({
             onValueChange={onValueChange}
             changeRequestType={changeRequestType}
             showChangeRequestLabel={showChangeRequestLabel}
-            crViewData={crViewData}
             effectiveHideEditButton={effectiveHideEditButton}
             isEditMode={isEditMode}
             onEdit={handleEdit}

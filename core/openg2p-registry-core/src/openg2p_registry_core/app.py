@@ -3,13 +3,12 @@ import asyncio
 import logging
 
 from openg2p_fastapi_common.app import Initializer as BaseInitializer
-from openg2p_fastapi_common.utils.crypto import KeymanagerCryptoHelper
+from openg2p_fastapi_common.crypto import CryptoFactory
 
 from .cache import init_cache
 from .config import Settings
 from .controller_services import (
     G2PDataModelControllerService,
-    G2PAttributeControllerService,
     G2PDocumentControllerService,
     G2PIngestControllerService,
     G2PIngestionConfigurationControllerService,
@@ -39,15 +38,21 @@ from .controller_services import (
     G2PAwePolicyConfigurationControllerService,
     G2PAweProxyControllerService,
 )
-from .helpers import AweHelper, ApplicationReferenceGenerator, PatternMatcher, TemplateHelper, get_document_handler
+from .helpers import (
+    AweHelper,
+    ApplicationReferenceGenerator,
+    MasterDataClient,
+    PartnerManagementClient,
+    PatternMatcher,
+    TemplateHelper,
+    get_document_handler,
+)
+from .interfaces import G2PIdGeneratorFactory, G2PRegisterDomainFactory
 
 from .models import (
     DataModel,
     DeduplicationChangerequestResult,
     DeduplicationRegisterResult,
-    G2PAttribute,
-    G2PAttributeValue,
-    G2PAttributeValueRole,
     G2PInputMechanism,
     G2PIntakeFormDefinition,
     G2PIntakeFormSubmission,
@@ -104,11 +109,11 @@ from .models import (
     G2PRegistrantAuthentication,
     G2PVcIssuance,
     G2PRegistryDataPolicy,
+    G2PRegisterExportDataQueue,
 )
 from .services import (
     G2PDataModelService,
     G2PDocumentService,
-    G2PAttributeService,
     G2PAttributeValueValidator,
     G2PChangeRequestWorkerService,
     G2PIngestionConfigurationService,
@@ -125,6 +130,7 @@ from .services import (
     G2PRegisterHistoryService,
     G2PRegisterService,
     G2PRegisterChangeRequestService,
+    G2PChangeRequestSectionPayloadService,
     G2PRegisterVerificationService,
     G2PTemplateService,
     G2PVcConfigurationService,
@@ -139,6 +145,7 @@ from .services import (
     InputMechanismMetadataService,
     InputMechanismDataService,
     ImportFileConfigurationService,
+    G2PRegisterExportService,
 )
 
 _config = Settings.get_config(strict=False)
@@ -156,9 +163,15 @@ class Initializer(BaseInitializer):
         get_document_handler()
         TemplateHelper()
         PatternMatcher()
+        PartnerManagementClient()
+        MasterDataClient()
         ApplicationReferenceGenerator(_config.application_reference_format)
-        KeymanagerCryptoHelper()
+        CryptoFactory.get()
         AweHelper()
+
+        # Factories
+        G2PRegisterDomainFactory()
+        G2PIdGeneratorFactory()
 
         # Services
         G2PDocumentService()
@@ -166,6 +179,8 @@ class Initializer(BaseInitializer):
         G2PRegisterDomainService()
         G2PIngestService()
         G2PRegisterService()
+        G2PRegisterExportService()
+        G2PChangeRequestSectionPayloadService()
         G2PRegisterChangeRequestService()
         G2PRegisterHistoryService()
         G2PRegisterMetadataService()
@@ -175,7 +190,6 @@ class Initializer(BaseInitializer):
         G2POutgestionDataService()
         G2POutgestionConfigurationService()
         G2PTemplateService()
-        G2PAttributeService()
         G2PAttributeValueValidator()
         G2PVcConfigurationService()
         InputMechanismMetadataService()
@@ -212,7 +226,6 @@ class Initializer(BaseInitializer):
         G2PRegistryConfigurationControllerService()
         G2PRegistryThemeControllerService()
         G2PRegistryLanguageControllerService()
-        G2PAttributeControllerService()
         G2PVcConfigurationControllerService()
         InputMechanismMetadataControllerService()
         ImportFileConfigurationControllerService()
@@ -271,7 +284,7 @@ class Initializer(BaseInitializer):
             await DeduplicationIntakeFormRegisterResult.create_migrate()
             await DeduplicationIntakeFormIntakeFormResult.create_migrate()
 
-            # Incoming Models (IncomingPartner removed - now in master-data-db)
+            # Incoming Models (partners live in Partner Management, not here)
             await IncomingRawData.create_migrate()
             await IncomingTemplate.create_migrate()
             await IncomingModelKeyPath.create_migrate()
@@ -289,13 +302,6 @@ class Initializer(BaseInitializer):
             await OutgoingRawDataPayload.create_migrate()
             await OutgoingTransformedDataPayload.create_migrate()
 
-            # Attribute Models
-            await G2PAttribute.create_migrate()
-            await G2PAttributeValue.create_migrate()
-            # New table, so create_all makes it on upgrade. It stays empty
-            # until a deployment opts into seeding code lists from CDS.
-            await G2PAttributeValueRole.create_migrate()
-
             # VC Configuration Models
             await G2PInputMechanism.create_migrate()
             await G2PRegistryVcConfiguration.create_migrate()
@@ -305,6 +311,7 @@ class Initializer(BaseInitializer):
             await ImportFileProcessQueue.create_migrate()
             await ImportFileProcessLog.create_migrate()
             await G2PFunctionalIdGenerationQueue.create_migrate()
+            await G2PRegisterExportDataQueue.create_migrate()
 
             # Completion Score Models
             await G2PCompletionScoreComputationQueue.create_migrate()

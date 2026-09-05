@@ -1,10 +1,7 @@
 import React, { useRef } from 'react';
-import { useSelector } from 'react-redux';
 import { tSchema } from '../utils/tSchema';
 import { useWidgetContext } from '../components/WidgetProvider';
 import { useBaseWidget } from '../hooks/useBaseWidget';
-import { WidgetRootState } from '../store';
-import { getValueByPath } from '../utils/pathUtils';
 import { BaseWidgetConfig } from '../types';
 import { WidgetFieldLabel } from '../components/WidgetFieldLabel';
 import { openFileInNewTab } from '../utils/filePreview';
@@ -58,6 +55,9 @@ const docControlClass =
 
 export const DocsWidget = ({ config }: DocsWidgetProps) => {
   const {
+    value,
+    error,
+    touched,
     isEnabled,
     onChange,
     onBlur,
@@ -70,15 +70,9 @@ export const DocsWidget = ({ config }: DocsWidgetProps) => {
   const totalDocs: number = widgetConfig['widget-total-docs'] || documents.length;
   const docColumns = distributeDocsToColumns(documents, totalDocs);
   const isReadonly = Boolean(widgetConfig['widget-readonly']);
-  const widgetId = widgetConfig['widget-id'];
-  const dataPath = widgetConfig['widget-data-path'];
-  
-  const allValues = useSelector((state: WidgetRootState) => state.widget.values);
-  const rawValue =
-    typeof dataPath === 'string' ? getValueByPath(allValues, dataPath) : allValues[widgetId];
   const currentValue: DocsValue =
-    rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)
-      ? (rawValue as DocsValue)
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as DocsValue)
       : {};
 
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -104,7 +98,6 @@ export const DocsWidget = ({ config }: DocsWidgetProps) => {
         [`${docKey}_source_filename`]: file.name,
       };
       onChange(updated);
-      onBlur();
     } catch (err) {
       console.error('Error serializing file:', err);
     }
@@ -159,6 +152,8 @@ export const DocsWidget = ({ config }: DocsWidgetProps) => {
     const file = getDocValue(docKey);
     const hasFile = !!file;
     const displayFileName = getSourceFilename(docKey, file);
+    const isEmptyRequired = isRequired && !hasFile;
+    const showValidationError = touched && error.length > 0 && isEmptyRequired;
 
     if (isReadonly) {
       return (
@@ -167,7 +162,7 @@ export const DocsWidget = ({ config }: DocsWidgetProps) => {
           className="mb-[10px] FileDisplayWidget flex flex-row items-start w-full"
         >
           <div
-            className="w-1/2 min-w-0 pr-2 text-base text-gray-600 font-medium truncate"
+            className="w-1/2 min-w-0 pr-2 text-base owt-text-muted font-medium truncate"
             style={{ fontFamily: 'Roboto, sans-serif' }}
             title={tSchema(t, label)}
           >
@@ -177,7 +172,7 @@ export const DocsWidget = ({ config }: DocsWidgetProps) => {
             {hasFile ? (
               <>
                 <span
-                  className="w-10/12 min-w-0 truncate text-base text-gray-900 font-medium"
+                  className="w-10/12 min-w-0 truncate text-base owt-text font-medium"
                   title={displayFileName}
                 >
                   {displayFileName}
@@ -192,7 +187,7 @@ export const DocsWidget = ({ config }: DocsWidgetProps) => {
                 </button>
               </>
             ) : (
-              <span className="text-base text-gray-900 font-medium">-</span>
+              <span className="text-base owt-text font-medium">-</span>
             )}
           </div>
         </div>
@@ -201,25 +196,27 @@ export const DocsWidget = ({ config }: DocsWidgetProps) => {
 
     return (
       <div key={docKey} className="mb-[10px]">
-        <div className="flex flex-row items-center w-full">
+        <div className="flex flex-row items-start w-full">
           <WidgetFieldLabel
-            className="w-1/2 min-w-0 pr-2 text-base font-medium text-gray-700"
+            className="w-1/2 min-w-0 pr-2 text-base font-medium owt-text"
             label={tSchema(t, label)}
             required={isRequired}
           />
-          <div className="w-1/2 min-w-0 flex items-center min-h-[1.5rem]">
+          <div className="w-1/2 min-w-0 flex flex-col justify-center min-h-[1.5rem]">
             {!hasFile && (
               <label
                 className={`${docControlClass} cursor-pointer justify-center gap-2 border border-dashed ${
                   !isEnabled ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
                 style={{
-                  borderColor: 'var(--owt-color-primary-dark, #F07B1A)',
-                  backgroundColor: 'var(--owt-color-background, #FFFFFF)',
+                  borderColor: isEmptyRequired
+                    ? 'var(--owt-widget-error-color)'
+                    : 'var(--owt-color-primary-dark)',
+                  backgroundColor: 'var(--owt-color-bg)',
                 }}
               >
                 <img src={uploadIcon} alt="" className="h-4 w-4 shrink-0" />
-                <span className="text-sm font-medium text-gray-900">
+                <span className="text-sm font-medium owt-text">
                   {t?.('common.upload') ?? 'Upload'}
                 </span>
                 <input
@@ -237,7 +234,7 @@ export const DocsWidget = ({ config }: DocsWidgetProps) => {
             )}
             {hasFile && (
               <div
-                className={`${docControlClass} gap-2 border border-gray-200 bg-white`}
+                className={`${docControlClass} gap-2 border owt-border owt-bg`}
                 title={displayFileName}
               >
                 <button
@@ -251,7 +248,7 @@ export const DocsWidget = ({ config }: DocsWidgetProps) => {
                     alt=""
                     className="h-4 w-4 shrink-0"
                   />
-                  <span className="min-w-0 truncate text-sm font-medium text-gray-900">
+                  <span className="min-w-0 truncate text-sm font-medium owt-text">
                     {displayFileName}
                   </span>
                 </button>
@@ -259,7 +256,7 @@ export const DocsWidget = ({ config }: DocsWidgetProps) => {
                   type="button"
                   onClick={() => handleRemove(docKey)}
                   disabled={!isEnabled}
-                  className={`inline-flex items-center justify-center shrink-0 h-5 w-5 p-0 border-0 rounded-full bg-gray-200 hover:bg-gray-300 focus:outline-none ${
+                  className={`inline-flex items-center justify-center shrink-0 h-5 w-5 p-0 border-0 rounded-full owt-bg-alt focus:outline-none ${
                     !isEnabled ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
                   title={t?.('common.remove') ?? 'Remove'}
@@ -271,6 +268,9 @@ export const DocsWidget = ({ config }: DocsWidgetProps) => {
                   />
                 </button>
               </div>
+            )}
+            {showValidationError && (
+              <p className="owt-field-error text-sm mt-1">{error[0]}</p>
             )}
           </div>
         </div>
@@ -302,8 +302,8 @@ export const DocsWidget = ({ config }: DocsWidgetProps) => {
                   style={{
                     bottom: '5px',
                     backgroundColor: isReadonly
-                      ? 'var(--owt-panel-divider-color, #C4C4C4)'
-                      : 'var(--owt-color-primary, #F5BB1A)',
+                      ? 'var(--owt-panel-divider-color)'
+                      : 'var(--owt-color-primary)',
                   }}
                 />
               )}

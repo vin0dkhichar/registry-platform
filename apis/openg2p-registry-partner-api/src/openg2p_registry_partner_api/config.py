@@ -64,7 +64,11 @@ class Settings(ExtSettings):
     signature_validation_enabled: bool = True
     consent_enforcement_enabled: bool = True
 
+<<<<<<< HEAD
     # Crypto backend selector (openg2p-fastapi-common build_crypto_helper):
+=======
+    # Crypto backend selector (openg2p-fastapi-common CryptoFactory):
+>>>>>>> 1.2
     #   "partner-mgmt" -> verify partner keys fetched from Partner Management
     #                     (GET {partner_mgmt_api_url}/keys/{reference_id}).
     #   "keymanager"   -> legacy Mosip Keymanager service (kept selectable,

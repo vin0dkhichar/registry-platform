@@ -7,6 +7,8 @@ import {
   isSerializedFile,
 } from '../../../utils/fileSerialization';
 import { SectionChanges } from '../types';
+import { isTableLikeWidget } from '../../../utils/extractTableRecordsFromSnapshot';
+import { diffSectionChangeRecords } from './diffSectionChangeRecords';
 import { trackSectionChanges } from './sectionSnapshot';
 
 export interface ExecuteSectionSaveParams {
@@ -18,6 +20,17 @@ export interface ExecuteSectionSaveParams {
   hasSupportingDocuments: boolean;
   dbSectionId?: string;
   sectionRegisterId?: string;
+  /**
+   * Registry / CR: skip no-op saves. Form sections emit every section field
+   * (once anything changed). Table sections emit only touched rows.
+   * Intake keeps full records.
+   */
+  sectionFieldsOnly?: boolean;
+  /**
+   * Intake Save/Next can skip required checks so drafts can be stored.
+   * RegistryView change-request save must validate required fields.
+   */
+  skipRequired?: boolean;
   onSectionSave?: (changes: SectionChanges) => Promise<void> | void;
 }
 
@@ -105,6 +118,19 @@ const stripDocsWidgetFields = (
   });
 };
 
+const readSectionInternalRecordId = (
+  source: Record<string, unknown>,
+  sectionRegisterId?: string,
+): string | undefined => {
+  if (!sectionRegisterId) return undefined;
+  const sectionData = source[sectionRegisterId];
+  if (!sectionData || typeof sectionData !== 'object' || Array.isArray(sectionData)) {
+    return undefined;
+  }
+  const id = (sectionData as Record<string, unknown>).internal_record_id;
+  return typeof id === 'string' && id.length > 0 ? id : undefined;
+};
+
 const extractProfileImage = (
   records: unknown[],
 ): { records: unknown[]; profileImage: File | null } => {
@@ -139,6 +165,8 @@ export const executeSectionSave = async ({
   hasSupportingDocuments,
   dbSectionId,
   sectionRegisterId,
+  sectionFieldsOnly = false,
+  skipRequired = false,
   onSectionSave,
 }: ExecuteSectionSaveParams): Promise<ExecuteSectionSaveResult> => {
   const sectionWidgets = collectWidgets(section.panels);
@@ -150,12 +178,17 @@ export const executeSectionSave = async ({
   }).widget;
   let currentSchemaData = currentState.values || {};
 
-  const isSectionValid = sectionValidate(section, currentSchemaData, dispatch, true);
+  const isSectionValid = sectionValidate(section, currentSchemaData, dispatch, skipRequired);
   if (!isSectionValid) {
     return { validated: false, saved: false, currentSchemaData };
   }
 
-  const oldSchemaData = schemaData || contextSchemaData;
+  const baselineSource = (schemaData || contextSchemaData || {}) as Record<string, unknown>;
+  const baselineRecords = trackSectionChanges(
+    sectionWidgets,
+    baselineSource,
+    sectionRegisterId,
+  );
   const newSchemaData = trackSectionChanges(
     sectionWidgets,
     currentSchemaData,
@@ -174,13 +207,45 @@ export const executeSectionSave = async ({
   const docsFiles = collectDocsWidgetFiles(section.panels, currentSchemaData);
   sectionFiles.push(...docsFiles);
 
-  if (JSON.stringify(oldSchemaData) === JSON.stringify(newSchemaData)) {
+  if (JSON.stringify(baselineRecords) === JSON.stringify(newSchemaData) && docsFiles.length === 0) {
     return { validated: true, saved: false, currentSchemaData };
   }
 
   const { records: recordsWithImage, profileImage } = extractProfileImage([...newSchemaData]);
   // Strip the docs blob objects from records — they travel in `files` instead.
-  const records = stripDocsWidgetFields(recordsWithImage, section.panels);
+  let records = stripDocsWidgetFields(recordsWithImage, section.panels);
+
+  if (sectionFieldsOnly) {
+    const baselineStripped = stripDocsWidgetFields(
+      [...baselineRecords],
+      section.panels,
+    );
+    const isTable = sectionWidgets.some((widget) => isTableLikeWidget(widget));
+    const internalRecordId =
+      readSectionInternalRecordId(baselineSource, sectionRegisterId) ??
+      readSectionInternalRecordId(currentSchemaData, sectionRegisterId);
+
+    let tableColumnKeys: string[] | undefined;
+    if (isTable) {
+      const tableWidget = sectionWidgets.find(isTableLikeWidget);
+      const columns = (tableWidget as any)?.['widget-data-columns'];
+      if (Array.isArray(columns)) {
+        tableColumnKeys = columns
+          .map((column: any) => column['column-key'] ?? column['widget-data-path'])
+          .filter((key): key is string => typeof key === 'string' && key.length > 0);
+      }
+    }
+
+    records = diffSectionChangeRecords(baselineStripped, records, {
+      isTable,
+      internalRecordId,
+      tableColumnKeys,
+    });
+
+    if (records.length === 0 && sectionFiles.length === 0 && !profileImage) {
+      return { validated: true, saved: false, currentSchemaData };
+    }
+  }
 
   try {
     await onSectionSave?.({
