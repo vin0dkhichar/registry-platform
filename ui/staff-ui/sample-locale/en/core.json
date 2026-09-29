@@ -788,6 +788,7 @@
   "step_reissue_token": "Reissue the token after role adjustment",
   "submission": "Submission",
   "submission_id": "Submission ID",
+  "submission_source": "Submission Source",
   "submit": "Submit",
   "submit_confirmation_subtitle": "If you submit your application, you will not be able to modify it further.",
   "submitted_successfully": "Submitted successfully",

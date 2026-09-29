@@ -9,6 +9,7 @@ import { EntityListPage, StackedCardSkeleton } from '@/components/shared';
 import { ColumnDef } from '@/components/shared/entity-list/types';
 import { ChangeRequestCard } from '@/features/change-request/components';
 import { useChangeRequestSearch } from '@/features/change-request/hooks/useChangeRequestSearch';
+import { useChangeRequestFilters } from '@/features/change-request/filters';
 import { usePagination, usePageSize } from '@/shared/hooks';
 import { ChangeRequest } from '@/features/change-request/types';
 
@@ -28,6 +29,15 @@ export default function ChangeRequestPage() {
     const sortBy = searchParams.get('sort') || null;
 
     const {
+        appliedFilters,
+        filterBy,
+        filterConfig,
+        applyFilters,
+        removeFilter,
+        clearAllFilters,
+    } = useChangeRequestFilters();
+
+    const {
         changeRequests,
         loading,
         currentPage,
@@ -38,6 +48,7 @@ export default function ChangeRequestPage() {
         pageSize,
         searchText: searchQuery || undefined,
         sortBy,
+        filterBy,
     });
 
     const { pageStart, pageEnd, total } = usePagination({
@@ -155,7 +166,12 @@ export default function ChangeRequestPage() {
             searchValue={searchQuery}
             searchPlaceholder={t('search')}
             onSearch={handleSearch}
-            showFilters={false}
+            showFilters
+            appliedFilters={appliedFilters}
+            filterConfig={filterConfig}
+            onApplyFilters={applyFilters}
+            removeFilter={removeFilter}
+            clearAllFilters={clearAllFilters}
             items={changeRequests}
             loading={loading}
             skeleton={skeleton}

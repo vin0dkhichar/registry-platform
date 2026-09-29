@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useRegister } from '@/context/RegisterContext';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useIntakeFilters } from '@/features/intake-form/filters';
 import { useRouter } from '@/i18n/navigation';
 
 import { EntityListPage, StackedCardSkeleton } from '@/components/shared';
@@ -36,9 +37,19 @@ export default function IntakeFormPage() {
     const [currentPage, setCurrentPage] = useState(1);
     const pageSize = usePageSize();
 
+    const {
+        appliedFilters,
+        filterBy,
+        filterConfig,
+        applyFilters,
+        removeFilter,
+        clearAllFilters,
+    } = useIntakeFilters();
+    const filterKey = typeof filterBy === 'string' ? filterBy : JSON.stringify(filterBy);
+
     useEffect(() => {
         setCurrentPage(1);
-    }, [pageSize]);
+    }, [pageSize, filterKey]);
 
     const { currentRegister } = useRegister();
     const registerId = currentRegister?.register_id;
@@ -50,7 +61,7 @@ export default function IntakeFormPage() {
 
     const { submissions, paginationInfo, loading: submissionsLoading } = useIntakeSubmissions(
         registerId,
-        { searchText: searchQuery, currentPage, pageSize, sortBy },
+        { searchText: searchQuery, currentPage, pageSize, sortBy, filterBy },
     );
 
     const pagination = usePagination({
@@ -151,7 +162,12 @@ export default function IntakeFormPage() {
             searchValue={searchQuery}
             searchPlaceholder={t('search')}
             onSearch={handleSearch}
-            showFilters={false}
+            showFilters
+            appliedFilters={appliedFilters}
+            filterConfig={filterConfig}
+            onApplyFilters={applyFilters}
+            removeFilter={removeFilter}
+            clearAllFilters={clearAllFilters}
             items={submissions ?? []}
             loading={submissionsLoading}
             skeleton={skeleton}
